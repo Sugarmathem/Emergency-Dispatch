@@ -1,6 +1,7 @@
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import dotenv from 'dotenv';
-import { handleInteraction } from './commands/pcr.js';
+import { handleInteraction as handlePcrInteraction } from './commands/pcr.js';
+import { handleInteraction as handleWarrantInteraction } from './commands/warrant.js';
 import { prisma } from './lib/db.js';
 
 dotenv.config();
@@ -23,7 +24,8 @@ client.on(Events.GuildCreate, async (guild) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    await handleInteraction(interaction);
+    await handlePcrInteraction(interaction);
+    await handleWarrantInteraction(interaction);
   } catch (err) {
     console.error(err);
     if (interaction.isRepliable() && !interaction.replied)
