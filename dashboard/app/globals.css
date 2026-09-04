@@ -1,0 +1,118 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --radius: 0.375rem;
+
+  --background: #0a0a0b;
+  --foreground: #e8e8ec;
+
+  --card: #0e0e10;
+  --card-foreground: #e8e8ec;
+
+  --popover: #121215;
+  --popover-foreground: #e8e8ec;
+
+  --primary: #e11d2a;
+  --primary-foreground: #ffffff;
+
+  --secondary: #16161a;
+  --secondary-foreground: #c9c9d1;
+
+  --muted: #141417;
+  --muted-foreground: #85858f;
+
+  --accent: #1a1a1f;
+  --accent-foreground: #e8e8ec;
+
+  --destructive: #e11d2a;
+  --destructive-foreground: #ffffff;
+
+  --border: #1d1d22;
+  --input: #222228;
+  --ring: #e11d2a;
+
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --info: #38bdf8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+::selection {
+  background: rgba(225, 29, 42, 0.35);
+}
+
+/* Slim console-style scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #26262c transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #26262c;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 1px scanline grid used on panel headers / status strips */
+.grid-lines {
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 100%;
+}
+
+/* Blinking dot for live indicators */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}

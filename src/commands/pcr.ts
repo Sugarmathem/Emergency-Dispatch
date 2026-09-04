@@ -5,6 +5,7 @@ import {
   PermissionFlagsBits, SlashCommandBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { prisma } from '../lib/db.js';
+import { verifyRobloxUsername, getRobloxIdentityFromBloxlink } from '../lib/bloxlink.js';
 
 export const pcrCommand = new SlashCommandBuilder()
   .setName('pcr')
@@ -12,6 +13,7 @@ export const pcrCommand = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('submit').setDescription('Submit a PCR'))
   .addSubcommand((s) => s.setName('stats').setDescription('Your personal PCR stats'))
   .addSubcommand((s) => s.setName('leaderboard').setDescription('Department leaderboard'))
+  .addSubcommand((s) => s.setName('verify').setDescription('Verify your Roblox identity via Bloxlink'))
   .addSubcommand((s) => s.setName('setup').setDescription('Set this channel as the PCR review channel'));
 
 export async function handleInteraction(interaction: Interaction) {
@@ -20,9 +22,11 @@ export async function handleInteraction(interaction: Interaction) {
     if (sub === 'submit') return openModal(interaction);
     if (sub === 'stats') return stats(interaction);
     if (sub === 'leaderboard') return leaderboard(interaction);
+    if (sub === 'verify') return openVerifyModal(interaction);
     if (sub === 'setup') return setup(interaction);
   }
   if (interaction.isModalSubmit() && interaction.customId === 'pcr-modal') return savePcr(interaction);
+  if (interaction.isModalSubmit() && interaction.customId === 'verify-roblox-modal') return verifyRobloxModal(interaction);
   if (interaction.isButton() && (interaction.customId.startsWith('approve:') || interaction.customId.startsWith('deny:')))
     return reviewPcr(interaction);
 }
@@ -53,14 +57,16 @@ async function setup(interaction: ChatInputCommandInteraction) {
   }
 }
 
-function row(id: string, label: string, style: TextInputStyle, placeholder: string) {
+
+
+function row(id: string, label: string, style: TextInputStyle, placeholder: string, required = true) {
   return new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
     new TextInputBuilder()
       .setCustomId(id)
       .setLabel(label)
       .setStyle(style)
       .setPlaceholder(placeholder)
-      .setRequired(true)
+      .setRequired(required)
   );
 }
 
@@ -76,16 +82,77 @@ async function openModal(interaction: ChatInputCommandInteraction) {
   await interaction.showModal(modal);
 }
 
+async function openVerifyModal(interaction: ChatInputCommandInteraction) {
+  const modal = new ModalBuilder().setCustomId('verify-roblox-modal').setTitle('🎮 Verify Roblox Account');
+  modal.addComponents(
+    row('robloxUsername', 'Roblox Username', TextInputStyle.Short, 'john_doe')
+  );
+  await interaction.showModal(modal);
+}
+
+async function verifyRobloxModal(interaction: ModalSubmitInteraction) {
+  await interaction.reply({ content: '⏳ Verifying...', ephemeral: true });
+  try {
+    await ensureServer(interaction);
+    const serverId = interaction.guildId!;
+    const username = interaction.fields.getTextInputValue('robloxUsername').trim();
+
+    const robloxData = await verifyRobloxUsername(username);
+    if (!robloxData) {
+      return interaction.editReply({ content: `❌ No Roblox account with username **${username}** found.` });
+    }
+
+    const member = await prisma.member.upsert({
+      where: { discordId_serverId: { discordId: interaction.user.id, serverId } },
+      update: {
+        robloxId: robloxData.robloxId,
+        robloxUsername: robloxData.robloxUsername,
+      },
+      create: {
+        discordId: interaction.user.id,
+        serverId,
+        robloxId: robloxData.robloxId,
+        robloxUsername: robloxData.robloxUsername,
+      },
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x2ecc71)
+      .setTitle('✅ Roblox Account Verified')
+      .addFields(
+        { name: 'Username', value: robloxData.robloxUsername, inline: true },
+        { name: 'Roblox ID', value: robloxData.robloxId, inline: true }
+      )
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    console.error(err);
+    await interaction.editReply({ content: '❌ Verification failed. Check bot logs.' });
+  }
+}
+
 async function savePcr(interaction: ModalSubmitInteraction) {
   await interaction.reply({ content: '⏳ Saving your PCR...', ephemeral: true });
   try {
     await ensureServer(interaction);
     const serverId = interaction.guildId!;
 
+    // Try Bloxlink first (if API key exists), otherwise use stored data
+    let robloxIdentity = await getRobloxIdentityFromBloxlink(interaction.user.id, serverId);
+
     const member = await prisma.member.upsert({
       where: { discordId_serverId: { discordId: interaction.user.id, serverId } },
-      update: {},
-      create: { discordId: interaction.user.id, serverId },
+      update: robloxIdentity ? {
+        robloxId: robloxIdentity.robloxId,
+        robloxUsername: robloxIdentity.robloxUsername,
+      } : {},
+      create: {
+        discordId: interaction.user.id,
+        serverId,
+        robloxId: robloxIdentity?.robloxId,
+        robloxUsername: robloxIdentity?.robloxUsername,
+      },
     });
 
     const last = await prisma.pcr.findFirst({ where: { serverId }, orderBy: { pcrNumber: 'desc' } });
@@ -103,6 +170,10 @@ async function savePcr(interaction: ModalSubmitInteraction) {
       },
     });
 
+    const robloxField = member.robloxUsername
+      ? `${member.robloxUsername} ✅ Verified`
+      : 'Not verified — use `/pcr verify`';
+
     const embed = new EmbedBuilder()
       .setColor(0xf39c12)
       .setTitle(`🚑 PCR #${pcr.pcrNumber} — ${interaction.user.username}`)
@@ -112,6 +183,7 @@ async function savePcr(interaction: ModalSubmitInteraction) {
         { name: 'Call Type', value: pcr.callType, inline: true },
         { name: 'Disposition', value: pcr.disposition, inline: true },
         { name: 'Command Team', value: pcr.commandTeam ?? '—', inline: true },
+        { name: 'Roblox', value: robloxField, inline: true },
         { name: 'Narrative', value: pcr.narrative }
       )
       .setTimestamp();
@@ -233,7 +305,8 @@ async function leaderboard(interaction: ChatInputCommandInteraction) {
     for (let i = 0; i < top.length; i++) {
       const m = await prisma.member.findUnique({ where: { id: top[i].memberId } });
       const user = await interaction.client.users.fetch(m!.discordId).catch(() => null);
-      lines.push(`${medals[i]} **${user?.username ?? 'Unknown'}** — ${top[i]._count._all} PCRs`);
+      const robloxInfo = m?.robloxUsername ? ` (${m.robloxUsername})` : '';
+      lines.push(`${medals[i]} **${user?.username ?? 'Unknown'}**${robloxInfo} — ${top[i]._count._all} PCRs`);
     }
 
     const teams = (
@@ -259,3 +332,4 @@ async function leaderboard(interaction: ChatInputCommandInteraction) {
     await interaction.editReply({ content: '❌ Failed to load leaderboard. Check bot logs.' });
   }
 }
+
